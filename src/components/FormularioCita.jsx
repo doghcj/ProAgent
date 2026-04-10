@@ -34,7 +34,7 @@ const FormularioCita = () => {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6 ">
       <div>
         <label className="block text-sm font-medium text-gray-700">Nombre Completo</label>
         <input 
@@ -83,7 +83,7 @@ const FormularioCita = () => {
       <button 
         type="submit" 
         disabled={loading}
-        className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
+        className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[#ff477e] hover:bg-[#ff477e-700] disabled:bg-[#ff477e-300]"
       >
         {loading ? 'Enviando...' : 'Confirmar Cita'}
       </button>
