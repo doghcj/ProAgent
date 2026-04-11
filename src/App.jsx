@@ -36,33 +36,33 @@ function App() {
   return (
 //mantenimiento manual
 
-   <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-6 font-mono">
-    <div className="w-full max-w-2xl bg-[#1a1a1a] border border-[#333] rounded-lg shadow-2xl overflow-hidden">
-      {/* Barra superior de la terminal */}
-      <div className="bg-[#333] px-4 py-2 flex gap-2">
-        <div className="w-3 h-3 rounded-full bg-[#ff5f56]"></div>
-        <div className="w-3 h-3 rounded-full bg-[#ffbd2e]"></div>
-        <div className="w-3 h-3 rounded-full bg-[#27c93f]"></div>
-        <span className="text-gray-400 text-xs ml-2">root@web-service: ~</span>
-      </div>
+  //  <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-6 font-mono">
+  //   <div className="w-full max-w-2xl bg-[#1a1a1a] border border-[#333] rounded-lg shadow-2xl overflow-hidden">
+  //     {/* Barra superior de la terminal */}
+  //     <div className="bg-[#333] px-4 py-2 flex gap-2">
+  //       <div className="w-3 h-3 rounded-full bg-[#ff5f56]"></div>
+  //       <div className="w-3 h-3 rounded-full bg-[#ffbd2e]"></div>
+  //       <div className="w-3 h-3 rounded-full bg-[#27c93f]"></div>
+  //       <span className="text-gray-400 text-xs ml-2">root@web-service: ~</span>
+  //     </div>
 
-      {/* Contenido de la terminal */}
-      <div className="p-6 text-[#00ff00] text-sm md:text-base leading-relaxed">
-        <p className="mb-2"><span className="text-white">last login:</span> {new Date().toLocaleString()}</p>
-        <p className="mb-2"><span className="text-blue-400">#</span> systemctl stop web-service</p>
-        <p className="mb-2 text-yellow-500">[WAIT] Updating services and schedule dependencies...</p>
-        <p className="mb-2"><span className="text-blue-400">#</span> status: <span className="bg-[#00ff00] text-black px-1 font-bold">UNDER_MAINTENANCE</span></p>
-        <br />
-        <p className="text-xl animate-pulse">
-          Estamos actualizando los servicios.
-          <br />
-          Regresaremos pronto...
-        </p>
-        <br />
-        <p className="mb-2"><span className="text-blue-400">#</span> _</p>
-      </div>
-    </div>
-  </div> //mantenimiento manual 
+  //     {/* Contenido de la terminal */}
+  //     <div className="p-6 text-[#00ff00] text-sm md:text-base leading-relaxed">
+  //       <p className="mb-2"><span className="text-white">last login:</span> {new Date().toLocaleString()}</p>
+  //       <p className="mb-2"><span className="text-blue-400">#</span> systemctl stop web-service</p>
+  //       <p className="mb-2 text-yellow-500">[WAIT] Updating services and schedule dependencies...</p>
+  //       <p className="mb-2"><span className="text-blue-400">#</span> status: <span className="bg-[#00ff00] text-black px-1 font-bold">UNDER_MAINTENANCE</span></p>
+  //       <br />
+  //       <p className="text-xl animate-pulse">
+  //         Estamos actualizando los servicios.
+  //         <br />
+  //         Regresaremos pronto...
+  //       </p>
+  //       <br />
+  //       <p className="mb-2"><span className="text-blue-400">#</span> _</p>
+  //     </div>
+  //   </div>
+  // </div> //mantenimiento manual 
 
 
 //     <div className="min-h-screen bg-[#FFFFFF] py-12 px-4">
