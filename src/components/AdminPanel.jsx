@@ -7,6 +7,10 @@ const AdminPanel = () => {
   const [rango, setRango] = useState({ inicio: '09:00', fin: '18:00' })
   const [guardandoHorario, setGuardandoHorario] = useState(false)
 
+  // ESTADOS PARA EL REPORTE
+  const [reporte, setReporte] = useState(null)
+  const [mostrarReporte, setMostrarReporte] = useState(false)
+
   const opcionesHorasAdmin = () => {
     const horas = [];
     for (let h = 0; h < 24; h++) {
@@ -51,6 +55,34 @@ const AdminPanel = () => {
     setGuardandoHorario(false)
   }
 
+  // FUNCIÓN PARA GENERAR EL REPORTE DIARIO
+  const generarReporteDiario = async () => {
+    setLoading(true);
+    const hoy = new Date().toLocaleDateString('en-CA'); // Obtiene YYYY-MM-DD local
+
+    try {
+      const { data, error } = await supabase
+        .from('appointments_history')
+        .select('*')
+        .eq('fecha', hoy);
+
+      if (error) throw error;
+
+      const totalCitas = data.length;
+      const serviciosCount = data.reduce((acc, cita) => {
+        acc[cita.servicio] = (acc[cita.servicio] || 0) + 1;
+        return acc;
+      }, {});
+
+      setReporte({ total: totalCitas, detalles: serviciosCount, fecha: hoy });
+      setMostrarReporte(true);
+    } catch (error) {
+      alert("Error al generar reporte: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const eliminarCita = async (id) => {
     if (window.confirm('¿Eliminar esta cita?')) {
       const { error } = await supabase.from('appointments').delete().eq('id', id)
@@ -59,9 +91,7 @@ const AdminPanel = () => {
     }
   }
 
-  // --- FUNCIÓN CORREGIDA ---
   const toggleEstado = async (cita) => {
-    // Si ya está completado no hacemos nada para evitar duplicados en el historial
     if (cita.estado === 'completado') return;
 
     const confirmacion = window.confirm(`¿Completar y archivar cita de ${cita.nombre}?`);
@@ -69,7 +99,6 @@ const AdminPanel = () => {
 
     setLoading(true);
     try {
-      // 1. Enviamos al historial
       const { error: insertError } = await supabase
         .from('appointments_history')
         .insert([{
@@ -83,7 +112,6 @@ const AdminPanel = () => {
 
       if (insertError) throw insertError;
 
-      // 2. Borramos de la lista actual
       const { error: deleteError } = await supabase
         .from('appointments')
         .delete()
@@ -93,7 +121,6 @@ const AdminPanel = () => {
 
       alert('✅ Cita completada y guardada en el historial.');
       fetchAppointments(); 
-
     } catch (error) {
       alert('Error: ' + error.message);
     } finally {
@@ -103,84 +130,159 @@ const AdminPanel = () => {
 
   return (
     <div className="space-y-6">
-      {/* CONFIGURACIÓN HORARIO */}
-      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-        <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">🕒 Configuración de Jornada</h3>
-        <div className="flex flex-wrap items-end gap-4">
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase">Apertura</label>
-            <select 
-              value={rango.inicio}
-              onChange={(e) => setRango({...rango, inicio: e.target.value})}
-              className="mt-1 block w-full border border-gray-300 rounded-md p-2 bg-white"
-            >
-              {opcionesHorasAdmin().map(hora => <option key={hora} value={hora}>{hora}</option>)}
-            </select>
+      {/* SECCIÓN SUPERIOR: HORARIO Y REPORTE */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* CONFIGURACIÓN HORARIO */}
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+          <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">🕒 Configuración</h3>
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="flex-1 min-w-[100px]">
+              <label className="block text-xs font-semibold text-gray-500 uppercase">Apertura</label>
+              <select 
+                value={rango.inicio}
+                onChange={(e) => setRango({...rango, inicio: e.target.value})}
+                className="mt-1 block w-full border border-gray-300 rounded-md p-2 bg-white"
+              >
+                {opcionesHorasAdmin().map(hora => <option key={`ini-${hora}`} value={hora}>{hora}</option>)}
+              </select>
+            </div>
+            <div className="flex-1 min-w-[100px]">
+              <label className="block text-xs font-semibold text-gray-500 uppercase">Cierre</label>
+              <select 
+                value={rango.fin}
+                onChange={(e) => setRango({...rango, fin: e.target.value})}
+                className="mt-1 block w-full border border-gray-300 rounded-md p-2 bg-white"
+              >
+                {opcionesHorasAdmin().map(hora => <option key={`fin-${hora}`} value={hora}>{hora}</option>)}
+              </select>
+            </div>
+            <button onClick={actualizarHorario} className="bg-[#ff477e] text-white px-6 py-2 rounded-lg font-bold hover:bg-[#e63e70] transition-all">
+              {guardandoHorario ? '...' : 'Guardar'}
+            </button>
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase">Cierre</label>
-            <select 
-              value={rango.fin}
-              onChange={(e) => setRango({...rango, fin: e.target.value})}
-              className="mt-1 block w-full border border-gray-300 rounded-md p-2 bg-white"
-            >
-              {opcionesHorasAdmin().map(hora => <option key={hora} value={hora}>{hora}</option>)}
-            </select>
-          </div>
-          <button onClick={actualizarHorario} className="bg-[#ff477e] text-white px-6 py-2 rounded-lg font-bold">
-            {guardandoHorario ? '...' : 'Establecer Horario'}
+        </div>
+
+        {/* BOTÓN GENERAR REPORTE */}
+        <div className="bg-gray-800 p-6 rounded-xl shadow-sm flex flex-col justify-center items-center text-white">
+          <p className="text-sm opacity-80 mb-2">¿Quieres ver cómo va el día?</p>
+          <button 
+            onClick={generarReporteDiario}
+            className="bg-blue-500 hover:bg-blue-600 px-6 py-2 rounded-lg font-bold flex items-center gap-2 transition-all shadow-lg"
+          >
+            📊 Generar Reporte Diario
           </button>
         </div>
       </div>
 
-      {/* TABLA DE CITAS */}
+      {/* MODAL / SECCIÓN DE REPORTE */}
+      {mostrarReporte && reporte && (
+        <div className="bg-blue-50 border-2 border-blue-200 p-6 rounded-xl relative animate-in fade-in duration-300">
+          <button 
+            onClick={() => setMostrarReporte(false)}
+            className="absolute top-4 right-4 text-blue-400 hover:text-blue-600 font-bold"
+          >
+            ✕
+          </button>
+          <h3 className="text-blue-800 font-bold text-xl mb-4 flex items-center gap-2">
+            📈 Resumen del Día ({reporte.fecha})
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="bg-white p-4 rounded-lg border border-blue-100">
+              <span className="text-xs font-bold text-blue-400 uppercase">Clientas Atendidas</span>
+              <p className="text-4xl font-black text-blue-600">{reporte.total}</p>
+            </div>
+            <div className="bg-white p-4 rounded-lg border border-blue-100">
+              <span className="text-xs font-bold text-blue-400 uppercase">Desglose de Servicios</span>
+              <div className="mt-2 space-y-1">
+                {Object.entries(reporte.detalles).length > 0 ? (
+                  Object.entries(reporte.detalles).map(([nombre, cantidad]) => (
+                    <div key={nombre} className="flex justify-between text-sm">
+                      <span className="text-gray-600">{nombre}</span>
+                      <span className="font-bold text-gray-800">x{cantidad}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs italic text-gray-400">No hay servicios completados hoy.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <hr className="border-gray-100" />
+
+      {/* TABLA DE CITAS PENDIENTES */}
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-800">Citas Recibidas</h2>
-        <button onClick={fetchAppointments} className="text-sm bg-gray-200 px-3 py-1 rounded">🔄 Refrescar</button>
+        <h2 className="text-2xl font-bold text-gray-800">Próximas Citas</h2>
+        <button onClick={fetchAppointments} className="text-sm bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded-lg transition-colors">
+          🔄 Refrescar Lista
+        </button>
       </div>
 
       {loading ? (
-        <p className="text-center py-10">Cargando...</p>
+        <div className="flex flex-col items-center justify-center py-10 opacity-50">
+           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mb-2"></div>
+           <p>Cargando datos...</p>
+        </div>
       ) : (
-        <div className="overflow-x-auto border rounded-lg bg-white shadow-sm">
+        <div className="overflow-x-auto border rounded-xl bg-white shadow-sm">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500">Cliente</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500">Servicio</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500">Fecha/Hora</th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500">Estado</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500">Acciones</th>
+                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Cliente</th>
+                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Servicio</th>
+                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Fecha/Hora</th>
+                <th className="px-6 py-3 text-center text-xs font-bold text-gray-500 uppercase">Estado</th>
+                <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
-              {appointments.map((cita) => (
-                <tr key={cita.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4">
-                    <div className="text-sm font-medium text-gray-900">{cita.nombre}</div>
-                    <div className="text-sm text-gray-500">{cita.telefono}</div>
-                  </td>
-                  <td className="px-6 py-4 text-sm">
-                    <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-semibold">{cita.servicio}</span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {cita.fecha} <b>| {cita.hora}</b>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <button
-                      onClick={() => toggleEstado(cita)} // <-- AQUÍ SE PASA EL OBJETO COMPLETO
-                      className={`px-3 py-1 rounded-full text-xs font-bold border ${
-                        cita.estado === 'completado' ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
-                      }`}
-                    >
-                      {cita.estado === 'completado' ? '✓ Completado' : '⌛ Pendiente'}
-                    </button>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <button onClick={() => eliminarCita(cita.id)} className="text-red-500 font-bold hover:bg-red-50 p-2 rounded">Eliminar</button>
+            <tbody className="divide-y divide-gray-100">
+              {appointments.length > 0 ? (
+                appointments.map((cita) => (
+                  <tr key={cita.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-bold text-gray-900">{cita.nombre}</div>
+                      <div className="text-xs text-gray-500">{cita.telefono}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">
+                        {cita.servicio}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                      {cita.fecha} <br />
+                      <span className="text-gray-900 font-bold">{cita.hora}</span>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <button
+                        onClick={() => toggleEstado(cita)}
+                        className={`px-4 py-1.5 rounded-full text-xs font-black transition-all border-2 ${
+                          cita.estado === 'completado' 
+                            ? "bg-green-100 text-green-700 border-green-200 cursor-default" 
+                            : "bg-yellow-50 text-yellow-600 border-yellow-200 hover:bg-yellow-100"
+                        }`}
+                      >
+                        {cita.estado === 'completado' ? '✓ LOGRADO' : '⌛ PENDIENTE'}
+                      </button>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <button 
+                        onClick={() => eliminarCita(cita.id)} 
+                        className="text-red-400 hover:text-red-600 text-xs font-bold uppercase tracking-tighter p-2"
+                      >
+                        Eliminar
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="5" className="px-6 py-10 text-center text-gray-400 italic">
+                    No hay citas pendientes para mostrar.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
