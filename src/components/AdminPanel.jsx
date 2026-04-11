@@ -5,7 +5,7 @@ const AdminPanel = () => {
   const [appointments, setAppointments] = useState([])
   const [loading, setLoading] = useState(true)
 
-  // 1. Función para ELIMINAR (la puse aquí arriba como pediste)
+  // 1. Función para ELIMINAR
   const eliminarCita = async (id) => {
     if (window.confirm('¿Estás seguro de que quieres eliminar esta cita?')) {
       const { error } = await supabase
@@ -16,8 +16,25 @@ const AdminPanel = () => {
       if (error) {
         alert('Error al eliminar: ' + error.message)
       } else {
-        fetchAppointments() // Recarga la lista automáticamente tras borrar
+        fetchAppointments()
       }
+    }
+  }
+
+  // NUEVA: Función para cambiar el ESTADO (Pendiente / Completado)
+  const toggleEstado = async (id, estadoActual) => {
+    // Si el estado es 'pendiente', lo cambia a 'completado', y viceversa
+    const nuevoEstado = estadoActual === 'pendiente' ? 'completado' : 'pendiente';
+
+    const { error } = await supabase
+      .from('appointments')
+      .update({ estado: nuevoEstado })
+      .eq('id', id)
+
+    if (error) {
+      alert('Error al actualizar: ' + error.message)
+    } else {
+      fetchAppointments() // Recarga la lista para mostrar el cambio
     }
   }
 
@@ -60,6 +77,7 @@ const AdminPanel = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Servicio</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha/Hora</th>
+                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
               </tr>
             </thead>
@@ -78,7 +96,21 @@ const AdminPanel = () => {
                   <td className="px-6 py-4 text-sm text-gray-500">
                     {cita.fecha} a las {cita.hora}
                   </td>
-                  {/* AQUÍ ESTÁ LA CELDA DEL BOTÓN ELIMINAR */}
+                  
+                  {/* CELDA DEL ESTADO */}
+                  <td className="px-6 py-4 text-center">
+                    <button
+                      onClick={() => toggleEstado(cita.id, cita.estado)}
+                      className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                        cita.estado === 'completado'
+                          ? "bg-green-100 text-green-700 border border-green-200"
+                          : "bg-yellow-100 text-yellow-700 border border-yellow-200"
+                      }`}
+                    >
+                      {cita.estado === 'completado' ? '✓ Completado' : '⌛ Pendiente'}
+                    </button>
+                  </td>
+
                   <td className="px-6 py-4 text-right">
                     <button 
                       onClick={() => eliminarCita(cita.id)}
