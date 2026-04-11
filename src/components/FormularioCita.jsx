@@ -1,38 +1,21 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supaBaseClient'
 
-// Función auxiliar para generar las horas (fuera del componente)
-const generarOpcionesDeHora = (inicio, fin) => {
-  const opciones = [];
-  // Convertimos "09:00" a número 9
-  let hInicio = parseInt(inicio.split(':')[0]);
-  let hFin = parseInt(fin.split(':')[0]);
-
-  for (let h = hInicio; h <= hFin; h++) {
-    const horaFormateada = h.toString().padStart(2, '0');
-    opciones.push(`${horaFormateada}:00`);
-    // No agregar el :30 si es la última hora de cierre
-    if (h < hFin) {
-      opciones.push(`${horaFormateada}:30`);
-    }
-  }
-  return opciones;
-};
-
 const FormularioCita = () => {
   const [loading, setLoading] = useState(false)
   const [rangoTrabajo, setRangoTrabajo] = useState({ inicio: '09:00', fin: '18:00' })
+  const [horasOcupadas, setHorasOcupadas] = useState([])
   
   const [formData, setFormData] = useState({
     nombre: '',
     telefono: '',
     servicio: 'Depilación de Cejas',
     fecha: '',
-    hora: '09:00',
+    hora: '',
     estado: 'pendiente'
   })
 
-  // Cargar la configuración de Nancy al abrir la página
+  // 1. Cargar configuración de jornada (Apertura y Cierre)
   useEffect(() => {
     const fetchConfig = async () => {
       const { data } = await supabase
@@ -43,50 +26,95 @@ const FormularioCita = () => {
       
       if (data) {
         setRangoTrabajo({ inicio: data.hora_inicio, fin: data.hora_fin });
-        // Ponemos la hora inicial del rango como seleccionada por defecto
-        setFormData(prev => ({ ...prev, hora: data.hora_inicio }));
       }
     };
     fetchConfig();
   }, []);
+
+  // 2. Cada vez que cambie la fecha, buscamos qué horas ya están tomadas en Supabase
+  useEffect(() => {
+    if (!formData.fecha) return;
+
+    const fetchOcupadas = async () => {
+      const { data } = await supabase
+        .from('appointments')
+        .select('hora')
+        .eq('fecha', formData.fecha);
+      
+      const ocupadas = data ? data.map(c => c.hora) : [];
+      setHorasOcupadas(ocupadas);
+
+      // Auto-seleccionar la primera hora disponible del nuevo día
+      const disponibles = calcularDisponibles(ocupadas);
+      if (disponibles.length > 0) {
+        setFormData(prev => ({ ...prev, hora: disponibles[0] }));
+      }
+    };
+    fetchOcupadas();
+  }, [formData.fecha]);
+
+  // 3. Lógica para filtrar horas (Pasadas + Ocupadas)
+  const calcularDisponibles = (ocupadas) => {
+    const opciones = [];
+    let hInicio = parseInt(rangoTrabajo.inicio.split(':')[0]);
+    let hFin = parseInt(rangoTrabajo.fin.split(':')[0]);
+
+    const ahora = new Date();
+    // Formato YYYY-MM-DD local
+    const hoyFormateado = ahora.toLocaleDateString('en-CA');
+    const esHoy = formData.fecha === hoyFormateado;
+    const horaActual = ahora.getHours();
+    const minutosActuales = ahora.getMinutes();
+
+    for (let h = hInicio; h <= hFin; h++) {
+      ["00", "30"].forEach(min => {
+        // No permitir agendar en la última media hora si es la hora de cierre
+        if (h === hFin && min === "30") return;
+
+        const horaOpcion = `${h.toString().padStart(2, '0')}:${min}`;
+        
+        // Validar si la hora ya pasó (solo si la fecha es hoy)
+        let yaPaso = false;
+        if (esHoy) {
+          if (h < horaActual) yaPaso = true;
+          if (h === horaActual && parseInt(min) <= minutosActuales) yaPaso = true;
+        }
+
+        // Validar si está en la lista de ocupadas
+        const estaOcupada = ocupadas.includes(horaOpcion);
+
+        if (!yaPaso && !estaOcupada) {
+          opciones.push(horaOpcion);
+        }
+      });
+    }
+    return opciones;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      // 1. Verificar si la hora ya está ocupada para ese día
-      const { data: existente, error: errorCheck } = await supabase
+      // Doble verificación: ¿Alguien tomó la hora mientras llenaba el form?
+      const { data: choque } = await supabase
         .from('appointments')
         .select('id')
         .eq('fecha', formData.fecha)
         .eq('hora', formData.hora)
         .maybeSingle();
 
-      if (errorCheck) throw errorCheck;
-
-      if (existente) {
-        alert(`Lo sentimos, la hora ${formData.hora} ya está reservada para este día. Por favor, elige otra.`);
+      if (choque) {
+        alert("¡Lo sentimos! Esta hora acaba de ser reservada. Por favor selecciona otra.");
         setLoading(false);
         return;
       }
 
-      // 2. Insertar la cita
       const { error } = await supabase.from('appointments').insert([formData]);
       if (error) throw error;
 
       alert('¡Cita agendada con éxito!');
-      
-      // Limpiar formulario manteniendo el rango de trabajo
-      setFormData({ 
-        nombre: '', 
-        telefono: '', 
-        servicio: 'Depilación de Cejas', 
-        fecha: '', 
-        hora: rangoTrabajo.inicio, 
-        estado: 'pendiente' 
-      });
-
+      setFormData({ ...formData, nombre: '', telefono: '', fecha: '' });
     } catch (error) {
       alert('Error: ' + error.message);
     } finally {
@@ -94,36 +122,35 @@ const FormularioCita = () => {
     }
   };
 
+  const horasDisponibles = calcularDisponibles(horasOcupadas);
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* NOMBRE */}
+    <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
       <div>
-        <label className="block text-sm font-medium text-gray-700">Nombre Completo</label>
+        <label className="block text-sm font-bold text-gray-700 mb-1">Nombre Completo</label>
         <input 
-          type="text" required
-          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+          type="text" required placeholder="Ej. María García"
+          className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-[#ff477e] outline-none"
           onChange={(e) => setFormData({...formData, nombre: e.target.value})}
           value={formData.nombre}
         />
       </div>
 
-      {/* TELÉFONO */}
       <div>
-        <label className="block text-sm font-medium text-gray-700">Teléfono</label>
+        <label className="block text-sm font-bold text-gray-700 mb-1">Teléfono</label>
         <input 
-          type="tel" required
-          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+          type="tel" required placeholder="809-000-0000"
+          className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-[#ff477e] outline-none"
           onChange={(e) => setFormData({...formData, telefono: e.target.value})}
           value={formData.telefono}
         />
       </div>
 
-      {/* SERVICIO */}
       <div>
-        <label className="block text-sm font-medium text-gray-700">Servicio</label>
+        <label className="block text-sm font-bold text-gray-700 mb-1">Servicio</label>
         <select 
           required
-          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white"
+          className="w-full border border-gray-300 rounded-lg p-2.5 bg-white outline-none"
           onChange={(e) => setFormData({...formData, servicio: e.target.value})}
           value={formData.servicio}
         >
@@ -136,40 +163,48 @@ const FormularioCita = () => {
         </select>
       </div>
 
-      {/* FECHA Y HORA DINÁMICA */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700">Fecha</label>
+          <label className="block text-sm font-bold text-gray-700 mb-1">Fecha</label>
           <input 
             type="date" required
-            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+            min={new Date().toLocaleDateString('en-CA')}
+            className="w-full border border-gray-300 rounded-lg p-2.5 outline-none"
             onChange={(e) => setFormData({...formData, fecha: e.target.value})}
             value={formData.fecha}
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700">Hora</label>
+          <label className="block text-sm font-bold text-gray-700 mb-1">Hora</label>
           <select 
             required
-            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white"
+            disabled={!formData.fecha}
+            className="w-full border border-gray-300 rounded-lg p-2.5 bg-white disabled:bg-gray-50 outline-none"
             onChange={(e) => setFormData({...formData, hora: e.target.value})}
             value={formData.hora}
           >
-            {/* Generamos las opciones basadas en el rango que configuró Nancy */}
-            {generarOpcionesDeHora(rangoTrabajo.inicio, rangoTrabajo.fin).map((h) => (
+            {!formData.fecha && <option>Elige día</option>}
+            {horasDisponibles.map((h) => (
               <option key={h} value={h}>{h}</option>
             ))}
+            {formData.fecha && horasDisponibles.length === 0 && (
+              <option disabled>No hay turnos hoy</option>
+            )}
           </select>
         </div>
       </div>
 
       <button 
         type="submit" 
-        disabled={loading}
-        className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[#ff477e] hover:opacity-90 disabled:bg-gray-400 transition-all"
+        disabled={loading || (formData.fecha && horasDisponibles.length === 0)}
+        className="w-full py-3 px-4 rounded-lg text-white bg-[#ff477e] font-black text-lg hover:bg-[#e63e70] disabled:bg-gray-300 transition-all shadow-md"
       >
-        {loading ? 'Enviando...' : 'Confirmar Cita'}
+        {loading ? 'Reservando...' : 'Confirmar Cita'}
       </button>
+      
+      {formData.fecha && horasDisponibles.length === 0 && (
+        <p className="text-center text-red-500 text-xs font-bold">⚠️ Ya no quedan horarios disponibles para este día.</p>
+      )}
     </form>
   )
 }
