@@ -12,6 +12,16 @@ const AdminPanel = () => {
   const [mostrarReporte, setMostrarReporte] = useState(false)
   const [fechaReporte, setFechaReporte] = useState(new Date().toLocaleDateString('en-CA'))
 
+  // FUNCIÓN PARA MOSTRAR 12H (AM/PM)
+  const formatear12h = (hora24) => {
+    if (!hora24) return '';
+    let [h, m] = hora24.split(':');
+    let horas = parseInt(h);
+    const ampm = horas >= 12 ? 'PM' : 'AM';
+    horas = horas % 12 || 12;
+    return `${horas}:${m} ${ampm}`;
+  };
+
   const opcionesHorasAdmin = () => {
     const horas = [];
     for (let h = 0; h < 24; h++) {
@@ -62,18 +72,25 @@ const AdminPanel = () => {
     try {
       const { data, error } = await supabase
         .from('appointments_history')
-        .select('*')
+        .select('servicio, precio')
         .eq('fecha', fechaReporte);
 
       if (error) throw error;
 
       const totalCitas = data.length;
+      const ingresosTotal = data.reduce((sum, cita) => sum + (Number(cita.precio) || 0), 0);
+
       const serviciosCount = data.reduce((acc, cita) => {
         acc[cita.servicio] = (acc[cita.servicio] || 0) + 1;
         return acc;
       }, {});
 
-      setReporte({ total: totalCitas, detalles: serviciosCount, fecha: fechaReporte });
+      setReporte({ 
+        total: totalCitas, 
+        detalles: serviciosCount, 
+        ingresos: ingresosTotal,
+        fecha: fechaReporte 
+      });
       setMostrarReporte(true);
     } catch (error) {
       alert("Error al obtener el reporte: " + error.message);
@@ -94,6 +111,7 @@ const AdminPanel = () => {
           nombre: cita.nombre,
           telefono: cita.telefono,
           servicio: cita.servicio,
+          precio: cita.precio,
           fecha: cita.fecha,
           hora: cita.hora,
           estado: 'completado'
@@ -108,7 +126,7 @@ const AdminPanel = () => {
 
       if (deleteError) throw deleteError;
 
-      alert('✅ Cita completada y guardada en el historial.');
+      alert('✅ Cita completada y guardada.');
       fetchAppointments(); 
     } catch (error) {
       alert('Error: ' + error.message);
@@ -118,7 +136,7 @@ const AdminPanel = () => {
   };
 
   const eliminarCita = async (id) => {
-    if(!window.confirm("¿Seguro que quieres eliminar esta cita? No se guardará en el historial.")) return;
+    if(!window.confirm("¿Seguro que quieres eliminar esta cita?")) return;
     const { error } = await supabase.from('appointments').delete().eq('id', id);
     if (error) alert(error.message);
     else fetchAppointments();
@@ -126,30 +144,33 @@ const AdminPanel = () => {
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto p-4">
-      {/* SECCIÓN SUPERIOR: HORARIO Y REPORTE */}
+      {/* SECCIÓN SUPERIOR AZUL */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* CONFIGURACIÓN HORARIO */}
         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
           <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">🕒 Configuración de Jornada</h3>
           <div className="flex flex-wrap items-end gap-4">
-            <div className="flex-1 min-w-[100px]">
+            <div className="flex-1 min-w-[120px]">
               <label className="block text-xs font-semibold text-gray-500 uppercase">Apertura</label>
               <select 
                 value={rango.inicio}
                 onChange={(e) => setRango({...rango, inicio: e.target.value})}
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2 bg-white"
               >
-                {opcionesHorasAdmin().map(hora => <option key={`ini-${hora}`} value={hora}>{hora}</option>)}
+                {opcionesHorasAdmin().map(hora => (
+                  <option key={`ini-${hora}`} value={hora}>{formatear12h(hora)}</option>
+                ))}
               </select>
             </div>
-            <div className="flex-1 min-w-[100px]">
+            <div className="flex-1 min-w-[120px]">
               <label className="block text-xs font-semibold text-gray-500 uppercase">Cierre</label>
               <select 
                 value={rango.fin}
                 onChange={(e) => setRango({...rango, fin: e.target.value})}
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2 bg-white"
               >
-                {opcionesHorasAdmin().map(hora => <option key={`fin-${hora}`} value={hora}>{hora}</option>)}
+                {opcionesHorasAdmin().map(hora => (
+                  <option key={`fin-${hora}`} value={hora}>{formatear12h(hora)}</option>
+                ))}
               </select>
             </div>
             <button onClick={actualizarHorario} className="bg-[#ff477e] text-white px-6 py-2 rounded-lg font-bold hover:bg-[#e63e70] transition-all">
@@ -158,7 +179,6 @@ const AdminPanel = () => {
           </div>
         </div>
 
-        {/* BUSCADOR DE REPORTES */}
         <div className="bg-gray-800 p-6 rounded-xl shadow-sm text-white flex flex-col justify-center">
           <h3 className="text-lg font-bold mb-4 flex items-center gap-2">📊 Historial de Ventas</h3>
           <div className="flex flex-col sm:flex-row gap-3 items-center">
@@ -178,21 +198,28 @@ const AdminPanel = () => {
         </div>
       </div>
 
-      {/* MODAL DE REPORTE */}
+      {/* MODAL DE REPORTE AZUL */}
       {mostrarReporte && reporte && (
         <div className="bg-blue-50 border-2 border-blue-200 p-6 rounded-xl relative animate-in fade-in duration-300">
           <button onClick={() => setMostrarReporte(false)} className="absolute top-4 right-4 text-blue-400 hover:text-blue-600 font-bold text-xl">✕</button>
           <h3 className="text-blue-800 font-bold text-xl mb-4 italic">📈 Resumen: {reporte.fecha}</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-white p-4 rounded-lg border border-blue-100 shadow-sm text-center">
-              <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Atendidas</span>
+              <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Atendidas</span>
               <p className="text-4xl font-black text-blue-600">{reporte.total}</p>
             </div>
+
+            <div className="bg-green-50 p-4 rounded-lg border border-green-200 shadow-sm text-center">
+              <span className="text-[10px] font-bold text-green-500 uppercase tracking-widest">Ingreso Total</span>
+              <p className="text-4xl font-black text-green-600">${reporte.ingresos}</p>
+            </div>
+
             <div className="bg-white p-4 rounded-lg border border-blue-100 shadow-sm">
-              <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Servicios</span>
+              <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Servicios</span>
               <div className="mt-2 space-y-1">
                 {Object.entries(reporte.detalles).map(([nombre, cantidad]) => (
-                  <div key={nombre} className="flex justify-between text-sm border-b border-gray-50">
+                  <div key={nombre} className="flex justify-between text-xs border-b border-gray-50">
                     <span className="text-gray-600">{nombre}</span>
                     <span className="font-bold">x{cantidad}</span>
                   </div>
@@ -213,12 +240,11 @@ const AdminPanel = () => {
 
       <div className="overflow-x-auto border rounded-xl bg-white shadow-sm">
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50 text-xs font-bold text-gray-500 uppercase">
+          <thead className="bg-gray-50 text-[10px] font-bold text-gray-500 uppercase">
             <tr>
               <th className="px-6 py-3 text-left">Cliente</th>
-              <th className="px-6 py-3 text-left">Servicio</th>
-              <th className="px-6 py-3 text-left">Fecha/Hora</th>
-              <th className="px-6 py-3 text-center">Estado</th>
+              <th className="px-6 py-3 text-left">Servicio / Precio</th>
+              <th className="px-6 py-3 text-left">Horario</th>
               <th className="px-6 py-3 text-right">Acciones</th>
             </tr>
           </thead>
@@ -228,22 +254,24 @@ const AdminPanel = () => {
                 <tr key={cita.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="text-sm font-bold text-gray-900">{cita.nombre}</div>
-                    <div className="text-xs text-gray-500">{cita.telefono}</div>
+                    <div className="text-[10px] text-gray-500">{cita.telefono}</div>
                   </td>
                   <td className="px-6 py-4">
                     <span className="bg-blue-50 text-blue-600 px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider">{cita.servicio}</span>
+                    <div className="text-sm font-bold text-green-600 mt-1">${cita.precio}</div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
-                    {cita.fecha} <br /> <span className="font-bold text-gray-900">{cita.hora}</span>
+                  <td className="px-6 py-4">
+                    <div className="text-xs text-gray-600">{cita.fecha}</div>
+                    <div className="font-bold text-gray-900 text-sm">{formatear12h(cita.hora)}</div>
                   </td>
-                  <td className="px-6 py-4 text-center">
-                    <button onClick={() => toggleEstado(cita)} className="bg-yellow-50 text-yellow-600 border border-yellow-200 px-3 py-1 rounded-full text-[10px] font-black hover:bg-yellow-100">⌛ PENDIENTE</button>
+                  <td className="px-6 py-4 flex gap-2 justify-end">
+                    <button onClick={() => toggleEstado(cita)} className="bg-yellow-50 text-yellow-600 border border-yellow-200 px-3 py-1 rounded-full text-[10px] font-black hover:bg-yellow-100">⌛ COMPLETAR</button>
+                    <button onClick={() => eliminarCita(cita.id)} className="text-red-400 hover:text-red-600 font-bold text-[10px] uppercase">Eliminar</button>
                   </td>
-                  <td className="px-6 py-4 text-right text-red-400 hover:text-red-600 font-bold cursor-pointer text-xs uppercase" onClick={() => eliminarCita(cita.id)}>Eliminar</td>
                 </tr>
               ))
             ) : (
-              <tr><td colSpan="5" className="text-center py-10 text-gray-400 italic">No hay citas pendientes.</td></tr>
+              <tr><td colSpan="4" className="text-center py-10 text-gray-400 italic">No hay citas pendientes.</td></tr>
             )}
           </tbody>
         </table>
