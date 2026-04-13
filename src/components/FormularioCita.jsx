@@ -1,38 +1,44 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supaBaseClient'
 
-const PRECIOS_SERVICIOS = {
-  "Depilación de Bozo": 200, "Depilación de Barbilla": 200, "Depilación de Cejas": 250,
-  "Depilación de Axila": 450, "Depilación Bikini": 400, "Depilación Íntima": 950,
-  "Depilación Entre Pierna": 300, "Depilación Media Pierna": 700, "Depilación Pierna Completa": 1400,
-  "Depilación de Medio Brazo": 500, "Depilación Brazo Completo": 1000, "Tintado": 350,
-  "Pestañas de Grupito": 600, "Pestañas Negritas Abiertas": 700, "Pestañas Doble": 1200,
-  "Combo: Depilación + Tintado": 500, "Combo: Tintado + Pestañas": 800
-};
+const SERVICIOS_LISTA = [
+  { nombre: "Depilación de Bozo", precio: 200 },
+  { nombre: "Depilación de Barbilla", precio: 200 },
+  { nombre: "Depilación de Cejas", precio: 250 },
+  { nombre: "Depilación de Axila", precio: 450 },
+  { nombre: "Depilación Bikini", precio: 400 },
+  { nombre: "Depilación Íntima", precio: 950 },
+  { nombre: "Depilación Entre Pierna", precio: 300 },
+  { nombre: "Depilación Media Pierna", precio: 700 },
+  { nombre: "Depilación Pierna Completa", precio: 1400 },
+  { nombre: "Depilación de Medio Brazo", precio: 500 },
+  { nombre: "Depilación Brazo Completo", precio: 1000 },
+  { nombre: "Tintado", precio: 350 },
+  { nombre: "Pestañas de Grupito", precio: 600 },
+  { nombre: "Pestañas Negritas Abiertas", precio: 700 },
+  { nombre: "Pestañas Doble", precio: 1200 },
+  { nombre: "Combo: Depilación + Tintado", precio: 500 },
+  { nombre: "Combo: Tintado + Pestañas", precio: 800 }
+];
 
 const FormularioCita = () => {
   const [loading, setLoading] = useState(false)
-  const [rangoTrabajo, setRangoTrabajo] = useState({ inicio: '09:00', fin: '18:00' })
+  const [estaAbierto, setEstaAbierto] = useState(true) // Nuevo estado
+  const [rangoTrabajo, setRangoTrabajo] = useState({ inicio: '09:00', fin: '19:00' })
   const [horasOcupadas, setHorasOcupadas] = useState([])
+  const [serviciosSeleccionados, setServiciosSeleccionados] = useState([])
   
   const [formData, setFormData] = useState({
-    nombre: '', telefono: '', servicio: 'Depilación de Cejas',
-    precio: PRECIOS_SERVICIOS["Depilación de Cejas"], fecha: '', hora: '', estado: 'pendiente'
+    nombre: '', telefono: '', fecha: '', hora: '', estado: 'pendiente'
   })
-
-  const formatear12h = (hora24) => {
-    if (!hora24) return '';
-    let [h, m] = hora24.split(':');
-    let horas = parseInt(h);
-    const ampm = horas >= 12 ? 'PM' : 'AM';
-    horas = horas % 12 || 12;
-    return `${horas}:${m} ${ampm}`;
-  };
 
   useEffect(() => {
     const fetchConfig = async () => {
       const { data } = await supabase.from('horarios_config').select('*').eq('id', 1).single();
-      if (data) setRangoTrabajo({ inicio: data.hora_inicio, fin: data.hora_fin });
+      if (data) {
+        setRangoTrabajo({ inicio: data.hora_inicio, fin: data.hora_fin });
+        setEstaAbierto(data.local_abierto); // Sincroniza con el Admin Panel
+      }
     };
     fetchConfig();
   }, []);
@@ -40,62 +46,59 @@ const FormularioCita = () => {
   useEffect(() => {
     if (!formData.fecha) return;
     const fetchOcupadas = async () => {
-      setHorasOcupadas([]);
       const { data } = await supabase.from('appointments').select('hora').eq('fecha', formData.fecha);
-      if (data) {
-        const ocupadas = data.map(c => {
-          const [h, m] = c.hora.split(':');
-          return `${h.padStart(2, '0')}:${m}`;
-        });
-        setHorasOcupadas(ocupadas);
-      }
+      if (data) setHorasOcupadas(data.map(c => c.hora.split(':')[0] + ":00")); 
     };
     fetchOcupadas();
   }, [formData.fecha]);
 
-  const calcularDisponibles = () => {
+  const toggleServicio = (servicio) => {
+    if (serviciosSeleccionados.find(s => s.nombre === servicio.nombre)) {
+      setServiciosSeleccionados(serviciosSeleccionados.filter(s => s.nombre !== servicio.nombre));
+    } else {
+      setServiciosSeleccionados([...serviciosSeleccionados, servicio]);
+    }
+  };
+
+  const totalPrecio = serviciosSeleccionados.reduce((acc, s) => acc + s.precio, 0);
+
+  const calcularHorasCerradas = () => {
     const opciones = [];
     let hInicio = parseInt(rangoTrabajo.inicio.split(':')[0]);
     let hFin = parseInt(rangoTrabajo.fin.split(':')[0]);
     const ahora = new Date();
-    const hoyFormateado = ahora.toLocaleDateString('en-CA');
-    
-    for (let h = hInicio; h <= hFin; h++) {
-      ["00", "30"].forEach(min => {
-        if (h === hFin && min === "30") return;
-        const horaOpcion = `${h.toString().padStart(2, '0')}:${min}`;
-        
-        if (formData.fecha === hoyFormateado) {
-          const [hActual, mActual] = [ahora.getHours(), ahora.getMinutes()];
-          if (h < hActual || (h === hActual && parseInt(min) <= mActual)) return;
-        }
+    const hoy = ahora.toLocaleDateString('en-CA');
 
-        if (!horasOcupadas.includes(horaOpcion)) {
-          opciones.push(horaOpcion);
-        }
-      });
+    for (let h = hInicio; h <= hFin; h++) {
+      const horaOpcion = `${h.toString().padStart(2, '0')}:00`;
+      if (formData.fecha === hoy) {
+        if (h <= ahora.getHours()) continue;
+      }
+      if (!horasOcupadas.includes(horaOpcion)) {
+        opciones.push(horaOpcion);
+      }
     }
     return opciones;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!estaAbierto) return alert("Lo sentimos, el local está cerrado temporalmente.");
+    if (serviciosSeleccionados.length === 0) return alert("Elige al menos un servicio");
+    
     setLoading(true);
+    const payload = {
+      ...formData,
+      servicio: serviciosSeleccionados.map(s => s.nombre).join(', '),
+      precio: totalPrecio
+    };
+
     try {
-      const { data: existe } = await supabase.from('appointments')
-        .select('id').eq('fecha', formData.fecha).eq('hora', formData.hora).maybeSingle();
-
-      if (existe) {
-        alert("Esa hora se ocupó hace un momento. Elige otra.");
-        setLoading(false);
-        return;
-      }
-
-      const { error } = await supabase.from('appointments').insert([formData]);
+      const { error } = await supabase.from('appointments').insert([payload]);
       if (error) throw error;
-      
-      alert('¡Cita agendada!');
-      setFormData({ ...formData, nombre: '', telefono: '', fecha: '', hora: '' });
+      alert('✨ ¡Cita agendada con éxito!');
+      setFormData({ nombre: '', telefono: '', fecha: '', hora: '', estado: 'pendiente' });
+      setServiciosSeleccionados([]);
     } catch (error) {
       alert(error.message);
     } finally {
@@ -103,91 +106,116 @@ const FormularioCita = () => {
     }
   };
 
-  const disponibles = calcularDisponibles();
+  // Si el local está cerrado, mostramos un mensaje amigable en lugar del formulario
+  if (!estaAbierto) {
+    return (
+      <div className="max-w-lg mx-auto p-10 bg-white rounded-3xl shadow-xl text-center border-2 border-red-50 mt-10">
+        <div className="text-6xl mb-4">🏠</div>
+        <h2 className="text-2xl font-black text-gray-800 italic">Local Cerrado</h2>
+        <p className="text-gray-500 mt-2 font-medium">
+          Nancy no está recibiendo citas en este momento.
+        </p>
+        <div className="mt-6 p-4 bg-red-50 rounded-2xl text-red-600 text-sm font-bold">
+          Por favor, intenta más tarde o contáctanos por WhatsApp.
+        </div>
+        <footer className="mt-10 pt-6 border-t border-gray-100">
+           <p className="text-[10px] text-gray-400 font-bold uppercase tracking-[0.3em]">
+            © {new Date().getFullYear()} Nancy Cejas y Pestañas
+          </p>
+        </footer>
+      </div>
+    );
+  }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5 bg-white p-6 rounded-2xl shadow-sm border border-gray-100 max-w-md mx-auto">
-      
-      {/* NOMBRE CON PLACEHOLDER */}
-      <div>
-        <label className="block text-sm font-bold text-gray-700 mb-1">Nombre Completo</label>
-        <input 
-          type="text" required placeholder="María García"
-          className="w-full border border-gray-200 rounded-xl p-3 outline-none focus:border-[#ff477e] focus:ring-1 focus:ring-[#ff477e] transition-all"
-          onChange={(e) => setFormData({...formData, nombre: e.target.value})}
-          value={formData.nombre}
-        />
-      </div>
-
-      {/* TELÉFONO CON PLACEHOLDER */}
-      <div>
-        <label className="block text-sm font-bold text-gray-700 mb-1">Teléfono</label>
-        <input 
-          type="tel" required placeholder="809-000-0000"
-          className="w-full border border-gray-200 rounded-xl p-3 outline-none focus:border-[#ff477e] focus:ring-1 focus:ring-[#ff477e] transition-all"
-          onChange={(e) => setFormData({...formData, telefono: e.target.value})}
-          value={formData.telefono}
-        />
-      </div>
-
-      {/* SERVICIO CON PRECIO DINÁMICO */}
-      <div>
-        <label className="block text-sm font-bold text-gray-700 mb-1">Servicio</label>
-        <div className="relative">
-          <select 
-            required
-            className="w-full border border-gray-200 rounded-xl p-3 bg-white outline-none appearance-none focus:border-[#ff477e] focus:ring-1 focus:ring-[#ff477e] pr-28 transition-all"
-            onChange={(e) => setFormData({ ...formData, servicio: e.target.value, precio: PRECIOS_SERVICIOS[e.target.value] })}
-            value={formData.servicio}
-          >
-            {Object.keys(PRECIOS_SERVICIOS).map(srv => (
-              <option key={srv} value={srv}>{srv}</option>
-            ))}
-          </select>
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none flex items-center gap-2">
-            <span className="text-[#ff477e] font-bold text-sm">${formData.precio}</span>
-            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-            </svg>
+    <div className="max-w-lg mx-auto p-4 flex flex-col min-h-[90vh]">
+      <div className="flex-grow">
+        <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-2xl shadow-lg border border-gray-100">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <input 
+              type="text" required placeholder="Nombre"
+              className="w-full border border-gray-200 rounded-xl p-3 outline-none focus:border-[#ff477e]"
+              onChange={(e) => setFormData({...formData, nombre: e.target.value})}
+              value={formData.nombre}
+            />
+            <input 
+              type="tel" required placeholder="Teléfono"
+              className="w-full border border-gray-200 rounded-xl p-3 outline-none focus:border-[#ff477e]"
+              onChange={(e) => setFormData({...formData, telefono: e.target.value})}
+              value={formData.telefono}
+            />
           </div>
-        </div>
-      </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-bold text-gray-700 mb-1">Fecha</label>
-          <input 
-            type="date" required
-            min={new Date().toLocaleDateString('en-CA')}
-            className="w-full border border-gray-200 rounded-xl p-3 outline-none focus:border-[#ff477e]"
-            onChange={(e) => setFormData({...formData, fecha: e.target.value})}
-            value={formData.fecha}
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-bold text-gray-700 mb-1">Hora</label>
-          <select 
-            required disabled={!formData.fecha}
-            className="w-full border border-gray-200 rounded-xl p-3 bg-white disabled:bg-gray-50 outline-none"
-            onChange={(e) => setFormData({...formData, hora: e.target.value})}
-            value={formData.hora}
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-3">Servicios deseados:</label>
+            <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto p-2 border rounded-xl bg-gray-50">
+              {SERVICIOS_LISTA.map((srv) => (
+                <div 
+                  key={srv.nombre}
+                  onClick={() => toggleServicio(srv)}
+                  className={`p-2 px-4 rounded-lg border cursor-pointer transition-all flex justify-between items-center text-sm ${
+                    serviciosSeleccionados.find(s => s.nombre === srv.nombre) 
+                    ? 'bg-[#ff477e] text-white border-[#ff477e]' 
+                    : 'bg-white text-gray-600 border-gray-200'
+                  }`}
+                >
+                  <span>{srv.nombre}</span>
+                  <span className="font-bold">${srv.precio}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <input 
+              type="date" required
+              min={new Date().toLocaleDateString('en-CA')}
+              className="w-full border border-gray-200 rounded-xl p-3 outline-none focus:border-[#ff477e]"
+              onChange={(e) => setFormData({...formData, fecha: e.target.value})}
+              value={formData.fecha}
+            />
+            <select 
+              required disabled={!formData.fecha}
+              className="w-full border border-gray-200 rounded-xl p-3 bg-white outline-none focus:border-[#ff477e]"
+              onChange={(e) => setFormData({...formData, hora: e.target.value})}
+              value={formData.hora}
+            >
+              <option value="">Hora</option>
+              {calcularHorasCerradas().map(h => (
+                <option key={h} value={h}>{h}</option>
+              ))}
+            </select>
+          </div>
+
+          <button 
+            type="submit" 
+            disabled={loading}
+            className="w-full py-4 rounded-xl text-white bg-[#ff477e] font-black text-xl hover:bg-[#e63e70] transition-all shadow-md active:scale-95 disabled:opacity-50"
           >
-            <option value="">{formData.fecha ? 'Selecciona' : 'Elige día'}</option>
-            {disponibles.map((h) => (
-              <option key={h} value={h}>{formatear12h(h)}</option>
-            ))}
-          </select>
-        </div>
+            {loading ? 'Agendando...' : `Confirmar - $${totalPrecio}`}
+          </button>
+        </form>
       </div>
 
-      <button 
-        type="submit" 
-        disabled={loading || (formData.fecha && disponibles.length === 0)}
-        className="w-full py-4 rounded-xl text-white bg-[#ff477e] font-black text-lg hover:bg-[#e63e70] disabled:bg-gray-300 transition-all shadow-md active:scale-95"
-      >
-        {loading ? 'Procesando...' : `Confirmar Cita - $${formData.precio}`}
-      </button>
-    </form>
+      {/* FOOTER DE COPYRIGHT */}
+      <footer className="mt-8 py-6 text-center">
+        <div className="flex flex-col items-center justify-center space-y-1">
+          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-[0.3em]">
+            © {new Date().getFullYear()} Nancy Cejas y Pestañas
+          </p>
+          <p className="text-xs text-gray-500 font-medium">
+            Diseñado y Desarrollado por 
+            <span className="text-[#ff477e] font-black italic"> Edwin Almonte</span>
+          </p>
+          <a 
+            href="mailto:edwintatis6@gmail.com" 
+            className="text-[10px] text-blue-400 hover:text-blue-600 transition-colors font-mono"
+          >
+            edwintatis6@gmail.com
+          </a>
+        </div>
+      </footer>
+    </div>
   )
 }
 
