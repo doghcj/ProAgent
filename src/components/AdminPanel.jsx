@@ -23,7 +23,7 @@ const AdminPanel = () => {
 
   const opcionesHorasAdmin = () => {
     const horas = [];
-    for (let h = 8; h <= 20; h++) { 
+    for (let h = 8; h <= 23; h++) { 
       const horaPad = h.toString().padStart(2, '0');
       horas.push(`${horaPad}:00`);
     }
