@@ -23,8 +23,8 @@ const SERVICIOS_LISTA = [
 
 const FormularioCita = () => {
   const [loading, setLoading] = useState(false)
-  const [estaAbierto, setEstaAbierto] = useState(true) // Nuevo estado
-  const [rangoTrabajo, setRangoTrabajo] = useState({ inicio: '09:00', fin: '19:00' })
+  const [estaAbierto, setEstaAbierto] = useState(true)
+  const [rangoTrabajo, setRangoTrabajo] = useState({ inicio: '09:00', fin: '23:00' })
   const [horasOcupadas, setHorasOcupadas] = useState([])
   const [serviciosSeleccionados, setServiciosSeleccionados] = useState([])
   
@@ -32,12 +32,22 @@ const FormularioCita = () => {
     nombre: '', telefono: '', fecha: '', hora: '', estado: 'pendiente'
   })
 
+  // Función para convertir formato 24h a 12h (Ej: "14:00" -> "02:00 PM")
+  const formatear12h = (hora24) => {
+    if (!hora24) return '';
+    let [h, m] = hora24.split(':');
+    let horas = parseInt(h);
+    const ampm = horas >= 12 ? 'PM' : 'AM';
+    horas = horas % 12 || 12;
+    return `${horas.toString().padStart(2, '0')}:${m} ${ampm}`;
+  };
+
   useEffect(() => {
     const fetchConfig = async () => {
       const { data } = await supabase.from('horarios_config').select('*').eq('id', 1).single();
       if (data) {
         setRangoTrabajo({ inicio: data.hora_inicio, fin: data.hora_fin });
-        setEstaAbierto(data.local_abierto); // Sincroniza con el Admin Panel
+        setEstaAbierto(data.local_abierto);
       }
     };
     fetchConfig();
@@ -106,20 +116,17 @@ const FormularioCita = () => {
     }
   };
 
-  // Si el local está cerrado, mostramos un mensaje amigable en lugar del formulario
   if (!estaAbierto) {
     return (
       <div className="max-w-lg mx-auto p-10 bg-white rounded-3xl shadow-xl text-center border-2 border-red-50 mt-10">
         <div className="text-6xl mb-4">🏠</div>
         <h2 className="text-2xl font-black text-gray-800 italic">Local Cerrado</h2>
-        <p className="text-gray-500 mt-2 font-medium">
-          Nancy no está recibiendo citas en este momento.
-        </p>
+        <p className="text-gray-500 mt-2 font-medium">Nancy no está recibiendo citas en este momento.</p>
         <div className="mt-6 p-4 bg-red-50 rounded-2xl text-red-600 text-sm font-bold">
           Por favor, intenta más tarde o contáctanos por WhatsApp.
         </div>
         <footer className="mt-10 pt-6 border-t border-gray-100">
-           <p className="text-[10px] text-gray-400 font-bold uppercase tracking-[0.3em]">
+          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-[0.3em]">
             © {new Date().getFullYear()} Nancy Cejas y Pestañas
           </p>
         </footer>
@@ -182,7 +189,9 @@ const FormularioCita = () => {
             >
               <option value="">Hora</option>
               {calcularHorasCerradas().map(h => (
-                <option key={h} value={h}>{h}</option>
+                <option key={h} value={h}>
+                  {formatear12h(h)}
+                </option>
               ))}
             </select>
           </div>
@@ -197,7 +206,6 @@ const FormularioCita = () => {
         </form>
       </div>
 
-      {/* FOOTER DE COPYRIGHT */}
       <footer className="mt-8 py-6 text-center">
         <div className="flex flex-col items-center justify-center space-y-1">
           <p className="text-[10px] text-gray-400 font-bold uppercase tracking-[0.3em]">
